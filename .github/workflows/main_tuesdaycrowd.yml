@@ -1,57 +1,60 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
-name: Build and deploy ASP.Net Core app to Azure Web App - tuesdaycrowd
-
+# Python on Linux Web App
+# Build a Python project (using Django/Flask/Bottle frameworks) and deploy it to Azure as a Linux web app.
+name: Deploy Python package to Azure Web App as a Linux web app.
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  [push]
+# CONFIGURATION
+# For help, go to https://github.com/Azure/Actions
+# See this in-depth article on CI for Python applications: https://azure.github.io/AppService/2020/12/11/cicd-for-python-apps.html
+#
+# 1. Set up the following secrets in your repository:
+#   AZURE_CREDENTIALS_GITHUB_SECRET
+#
+# 2. Change these variables for your configuration:
+env:
+  AZURE_WEBAPP_NAME: tuesdaycrowd # set this to your application's name
+  WORKING_DIRECTORY: '.'         # set this to the path to your path of working directory inside github repository, defaults to the repository root
+  PYTHON_VERSION: '3.9' 
+  STARTUP_COMMAND: ''           # set this to the startup command required to start the gunicorn server. default it is empty
 
+name: Build and deploy Python app
 jobs:
-  build:
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Set up .NET Core
-        uses: actions/setup-dotnet@v1
-        with:
-          dotnet-version: '3.1.301'
-          include-prerelease: true
-
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
-
-      - name: dotnet publish
-        run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v2
-        with:
-          name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
-
-  deploy:
-    runs-on: windows-latest
-    needs: build
-    environment:
-      name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v2
-        with:
-          name: .net-app
-
-      - name: Deploy to Azure Web App
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: 'tuesdaycrowd'
-          slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B77413D9878D4527930FE5679CE9F49E }}
-          package: .
+ build-and-deploy:
+  runs-on: ubuntu-latest
+  environment: dev
+  steps:
+  # checkout the repo 
+  - uses: actions/checkout@master
+  # setup python
+  - name: Setup Python
+    uses: actions/setup-python@v1
+    with:
+     python-version: ${{ env.PYTHON_VERSION }}
+  # install dependencies
+  - name: python install
+    working-directory: ${{ env.WORKING_DIRECTORY }}
+    run: |
+     sudo apt install python${{ env.PYTHON_VERSION }}-venv
+     python -m venv --copies antenv
+     source antenv/bin/activate
+     pip install setuptools
+     pip install -r requirements.txt
+  # Azure login
+  - uses: azure/login@v1
+    with:
+     creds: ${{ secrets.AZURE_CREDENTIALS_GITHUB_SECRET }}
+  - uses: azure/appservice-settings@v1
+    with:
+     app-name: ${{ env.AZURE_WEBAPP_NAME }}
+     mask-inputs: false
+     general-settings-json: '{"linuxFxVersion": "PYTHON|${{ env.PYTHON_VERSION }}"}' #'General configuration settings as Key Value pairs'
+  # deploy web app
+  - uses: azure/webapps-deploy@v2
+    with:
+     app-name: ${{ env.AZURE_WEBAPP_NAME }}
+     package: ${{ env.WORKING_DIRECTORY }}
+     startup-command: ${{ env.STARTUP_COMMAND }}
+  # Azure logout
+  - name: logout
+    run: |
+     az logout
